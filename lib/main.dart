@@ -1,9 +1,13 @@
+
+
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:image_picker/image_picker.dart';
 import 'package:permission_handler/permission_handler.dart';
 import 'dart:io';
-import 'package:path/path.dart' as path; // Add this import
+import 'package:http/http.dart' as http; // Import the HTTP package
+import 'dart:convert'; // For JSON decoding
+import 'package:path/path.dart' as path;
 import 'result_page.dart';
 
 void main() {
@@ -80,7 +84,7 @@ class _MyHomePageState extends State<MyHomePage> {
       );
 
       if (pickedFile != null) {
-        final directoryPath = 'D:\\main_project';
+        final directoryPath = 'D:\\main_project\\TripoSR\\Examples';
         final storedImagesDir = Directory(directoryPath);
         if (!await storedImagesDir.exists()) {
           await storedImagesDir.create(recursive: true);
@@ -113,6 +117,58 @@ class _MyHomePageState extends State<MyHomePage> {
       print('Error: ${e.toString()}');
     }
   }
+
+  
+ Future<void> uploadImage() async {
+  if (_image == null) {
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(content: Text('No image selected')),
+    );
+    return;
+  }
+
+  setState(() => _processing = true);
+
+  try {
+    final request = http.MultipartRequest(
+      'POST',
+      Uri.parse('http://127.0.0.1:5000/upload-image'),
+    );
+
+    // Add the file to the request
+    request.files.add(await http.MultipartFile.fromPath('file', _image!.path));
+
+    // Send the request
+    final response = await request.send();
+    final responseData = await http.Response.fromStream(response);
+
+    if (response.statusCode == 200) {
+      final responseJson = json.decode(responseData.body);
+
+      // Assuming the server returns the path to the generated 3D model
+      final outputFilePath = responseJson['output'];
+
+      // Navigate to the result page with the generated 3D model
+      Navigator.push(
+        context,
+        MaterialPageRoute(
+          builder: (context) => ResultPage(image: File(outputFilePath)),
+        ),
+      );
+    } else {
+      final error = json.decode(responseData.body);
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('Error: ${error['error']}')),
+      );
+    }
+  } catch (e) {
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(content: Text('Error: ${e.toString()}')),
+    );
+  } finally {
+    setState(() => _processing = false);
+  }
+}
 
   @override
   Widget build(BuildContext context) {
@@ -245,41 +301,33 @@ class _MyHomePageState extends State<MyHomePage> {
                       onPressed: () => getImage(ImageSource.camera),
                       backgroundColor: Color(0xFFB17457),
                       child: Icon(Icons.camera_alt, color: Colors.white),
-                      heroTag: 'cameraButton', // Add unique heroTag
+                      heroTag: 'cameraButton',
                     ),
                     FloatingActionButton(
                       onPressed: () => getImage(ImageSource.gallery),
                       backgroundColor: Color(0xFFB17457),
                       child: Icon(Icons.photo_library, color: Colors.white),
-                      heroTag: 'galleryButton', // Add unique heroTag
+                      heroTag: 'galleryButton',
                     ),
                   ],
                 ),
                 SizedBox(height: 30),
                 ElevatedButton(
-                  onPressed: _image == null
-                      ? null
-                      : () {
-                          Navigator.push(
-                            context,
-                            MaterialPageRoute(
-                              builder: (context) => ResultPage(image: _image!),
-                            ),
-                          );
-                        },
-                  child: Text(
-                    'Convert to 3D',
-                    style: GoogleFonts.poppins(fontSize: 20, color: Colors.white),
-                  ),
-                  style: ElevatedButton.styleFrom(
-                    backgroundColor: Colors.deepOrange,
-                    padding: EdgeInsets.symmetric(horizontal: 60, vertical: 15),
-                    shape: RoundedRectangleBorder(
-                      borderRadius: BorderRadius.circular(30),
-                    ),
-                    elevation: 10,
-                  ),
-                ),
+  onPressed: _image == null ? null : uploadImage,
+  child: Text(
+    'Convert to 3D',
+    style: GoogleFonts.poppins(fontSize: 20, color: Colors.white),
+  ),
+  style: ElevatedButton.styleFrom(
+    backgroundColor: Colors.deepOrange,
+    padding: EdgeInsets.symmetric(horizontal: 60, vertical: 15),
+    shape: RoundedRectangleBorder(
+      borderRadius: BorderRadius.circular(30),
+    ),
+    elevation: 10,
+  ),
+),
+
                 SizedBox(height: 30),
               ],
             ),
